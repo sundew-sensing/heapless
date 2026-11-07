@@ -455,7 +455,7 @@ impl<LenT: LenType, S: StringStorage + ?Sized> StringInner<LenT, S> {
     /// # Ok::<(), heapless::CapacityError>(())
     /// ```
     #[inline]
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         unsafe { str::from_utf8_unchecked(self.vec.as_slice()) }
     }
 
@@ -474,7 +474,7 @@ impl<LenT: LenType, S: StringStorage + ?Sized> StringInner<LenT, S> {
     /// # Ok::<(), heapless::CapacityError>(())
     /// ```
     #[inline]
-    pub fn as_mut_str(&mut self) -> &mut str {
+    pub const fn as_mut_str(&mut self) -> &mut str {
         unsafe { str::from_utf8_unchecked_mut(self.vec.as_mut_slice()) }
     }
 
@@ -1420,6 +1420,35 @@ mod tests {
         }
         // Assert that the hand-encoded bytes are actually omega a b and the test is correct.
         assert_eq!(S_U8, "Ωab");
+    }
+
+    #[test]
+    fn const_as_str() {
+        /// Builds "ab" and uppercases it to "AB" through `as_mut_str`, so the result shows that
+        /// `as_mut_str` writes through.
+        const fn upper<LenT: LenType>() -> String<4, LenT> {
+            let mut s = String::try_from_str("ab").unwrap();
+            s.as_mut_str().make_ascii_uppercase();
+            s
+        }
+        // Statics are computed at compile time, so these require `as_mut_str` to be const.
+        static S_U8: String<4, u8> = upper();
+        static S_U16: String<4, u16> = upper();
+        static S_U32: String<4, u32> = upper();
+        static S_USIZE: String<4, usize> = upper();
+        static VIEW: &StringView<u8> = &S_U8;
+        static EMPTY: String<4> = String::new();
+        // Checked at compile time, so this requires `as_str` to be const, on both `String` and
+        // `StringView`. Rust doesn't allow matching on `str` in const yet, so these compare the
+        // bytes.
+        const {
+            assert!(matches!(S_U8.as_str().as_bytes(), b"AB"));
+            assert!(matches!(S_U16.as_str().as_bytes(), b"AB"));
+            assert!(matches!(S_U32.as_str().as_bytes(), b"AB"));
+            assert!(matches!(S_USIZE.as_str().as_bytes(), b"AB"));
+            assert!(matches!(VIEW.as_str().as_bytes(), b"AB"));
+            assert!(EMPTY.as_str().is_empty());
+        }
     }
 
     #[test]
